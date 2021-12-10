@@ -7,7 +7,7 @@
 [Auth Service](https://developer.huawei.com/consumer/en/agconnect/auth-service/)<p>
 [Cloud DB](https://developer.huawei.com/consumer/en/agconnect/cloud-base/)<p>
 
-<b>3rd Services Used</b>
+<b>3rd Party Services Used</b>
 
 [Retrofit](https://square.github.io/retrofit/)<p>
 [OkHttp](https://square.github.io/okhttp/)<p>
