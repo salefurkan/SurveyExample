@@ -4,10 +4,12 @@ import static example.methods.surveyexample.push.PushManager.pushToken;
 import static example.methods.surveyexample.push.PushManager.sendNotification;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Message;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+
 import com.huawei.agconnect.cloud.database.AGConnectCloudDB;
 import com.huawei.agconnect.cloud.database.CloudDBZone;
 import com.huawei.agconnect.cloud.database.CloudDBZoneConfig;
@@ -30,7 +32,7 @@ import java.util.logging.LogRecord;
 
 public class CloudDBZoneWrapper {
     private static final String TAG = "CloudDBZoneWrapper";
-    public static int yes,no;
+    public static int yes, no;
     private AGConnectCloudDB mCloudDB;
 
     public static final String TAG_dB = "DB_ZONE_WRAPPER";
@@ -42,25 +44,26 @@ public class CloudDBZoneWrapper {
 
     private UiCallBack mUiCallBack = UiCallBack.DEFAULT;
 
-    private int mBookIndex = 0;
+    private int mBookIndex = -1;
 
     private ReadWriteLock mReadWriteLock = new ReentrantReadWriteLock();
 
-    private OnSnapshotListener<Votes> mSnapshotListener = new OnSnapshotListener<Votes>() {
+    private OnSnapshotListener<Users> mSnapshotListener = new OnSnapshotListener<Users>() {
         @Override
-        public void onSnapshot(CloudDBZoneSnapshot<Votes> cloudDBZoneSnapshot, AGConnectCloudDBException e) {
+        public void onSnapshot(CloudDBZoneSnapshot<Users> cloudDBZoneSnapshot, AGConnectCloudDBException e) {
             if (e != null) {
                 Log.w(TAG, "onSnapshot: " + e.getMessage());
                 return;
             }
-            CloudDBZoneObjectList<Votes> snapshotObjects = cloudDBZoneSnapshot.getSnapshotObjects();
-            List<Votes> bookInfoList = new ArrayList<>();
+            CloudDBZoneObjectList<Users> snapshotObjects = cloudDBZoneSnapshot.getSnapshotObjects();
+            List<Users> userInfoList = new ArrayList<>();
             try {
                 if (snapshotObjects != null) {
                     while (snapshotObjects.hasNext()) {
-                        Votes bookInfo = snapshotObjects.next();
-                        bookInfoList.add(bookInfo);
-                        updateBookIndex(bookInfo);
+                        Users userInfo = snapshotObjects.next();
+                        userInfoList.add(userInfo);
+                        updateUserIndex(userInfo);
+                        //updateBookIndex(bookInfo);
                     }
                 }
             } catch (AGConnectCloudDBException snapshotException) {
@@ -71,14 +74,24 @@ public class CloudDBZoneWrapper {
         }
     };
 
-    private void updateBookIndex(Votes bookInfo) {
+    private void updateUserIndex(Users users) {
         try {
             mReadWriteLock.writeLock().lock();
-            if (mBookIndex < bookInfo.getId()) {
-                mBookIndex = bookInfo.getId();
+            if (mBookIndex < users.getId()) {
+                mBookIndex = users.getId();
+                Log.w(TAG, "updateUserIndex: " + mBookIndex);
             }
         } finally {
             mReadWriteLock.writeLock().unlock();
+        }
+    }
+
+    public int getUserIndex() {
+        try {
+            mReadWriteLock.readLock().lock();
+            return mBookIndex;
+        } finally {
+            mReadWriteLock.readLock().unlock();
         }
     }
 
@@ -123,7 +136,7 @@ public class CloudDBZoneWrapper {
         }
     }
 
-    public void openCloudDBZoneV2(Context context) {
+    public void openCloudDBZoneV2(Context context, String email) {
         mConfig = new CloudDBZoneConfig("Pulls",
                 CloudDBZoneConfig.CloudDBZoneSyncProperty.CLOUDDBZONE_CLOUD_CACHE,
                 CloudDBZoneConfig.CloudDBZoneAccessProperty.CLOUDDBZONE_PUBLIC);
@@ -136,7 +149,9 @@ public class CloudDBZoneWrapper {
                 Log.i(TAG_dB, "Open cloudDBZone success");
                 mCloudDBZone = cloudDBZone;
 
-                getAllUsers(context);
+                getAllBooks(context, false);
+                getAllUsers(context, email);
+
                 if (mCloudDB == null) {
                     Log.i(TAG, "onSuccess: mCloudDBZone is null");
                 }
@@ -161,6 +176,11 @@ public class CloudDBZoneWrapper {
             }
 
             @Override
+            public void onUserAddOrQuery(List<Users> userList) {
+                Log.i(TAG, "Using default onAddOrQuery");
+            }
+
+            @Override
             public void isDataUpsert(Boolean state) {
 
                 Log.i(TAG, "Using add value");
@@ -174,24 +194,55 @@ public class CloudDBZoneWrapper {
 
         void onAddOrQuery(List<Votes> bookInfoList);
 
+        void onUserAddOrQuery(List<Users> userList);
+
         void isDataUpsert(Boolean state);
 
         void updateUiOnError(String errorMessage);
     }
 
-    public void upsertBookInfos(Votes bookInfo,Context context) {
+    public void upsertUserInfos(Users userInfo, Context context) {
         if (mCloudDBZone == null) {
             Log.w(TAG, "CloudDBZone is null, try re-open it");
             return;
         }
-        Log.i(TAG, "upsertBookInfos: "+bookInfo.getId()+" "+bookInfo.getYes()+" "+bookInfo.getNo());
+
+        Task<Integer> upsertTask = mCloudDBZone.executeUpsert(userInfo);
+        upsertTask.addOnSuccessListener(new OnSuccessListener<Integer>() {
+            @Override
+            public void onSuccess(Integer cloudDBZoneResult) {
+                Log.i(TAG, "Upsert " + cloudDBZoneResult + " records 123");
+                getAllUsers(context);
+            }
+        }).addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(Exception e) {
+                mUiCallBack.updateUiOnError("Insert book info failed");
+            }
+        });
+    }
+
+    public void upsertBookInfos(Votes bookInfo, Context context) {
+        if (mCloudDBZone == null) {
+            Log.w(TAG, "CloudDBZone is null, try re-open it");
+            return;
+        }
+        Log.i(TAG, "upsertBookInfos: " + bookInfo.getId() + " " + bookInfo.getYes() + " " + bookInfo.getNo());
+
+        SharedPreferences sharedPreferences = context.getSharedPreferences(context.getPackageName(), Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+
+        editor.putBoolean("check", true);
+        editor.commit();
 
         Task<Integer> upsertTask = mCloudDBZone.executeUpsert(bookInfo);
         upsertTask.addOnSuccessListener(new OnSuccessListener<Integer>() {
             @Override
             public void onSuccess(Integer cloudDBZoneResult) {
                 Log.i(TAG, "Upsert " + cloudDBZoneResult + " records");
-                getAllUsers(context);
+
+
+                getAllBooks(context, true);
             }
         }).addOnFailureListener(new OnFailureListener() {
             @Override
@@ -265,18 +316,43 @@ public class CloudDBZoneWrapper {
         }
     }
 
+    public void getAllUsers(Context context, String signInUserEmail) {
+        if (mCloudDBZone == null) {
+            Log.w(TAG_dB, "GET USER DETAIL : CloudDBZone is null, try re-open it USERS");
+            return;
+        }
+        Task<CloudDBZoneSnapshot<Users>> queryTask = mCloudDBZone.executeQuery(
+                CloudDBZoneQuery.where(Users.class),
+                CloudDBZoneQuery.CloudDBZoneQueryPolicy.POLICY_QUERY_FROM_CLOUD_ONLY);
+        queryTask.addOnSuccessListener(new OnSuccessListener<CloudDBZoneSnapshot<Users>>() {
+            @Override
+            public void onSuccess(CloudDBZoneSnapshot<Users> snapshot) {
+                userListResult(snapshot, context, signInUserEmail);
+                Log.w(TAG_dB, "GET USER DETAIL : GoResults: USERS");
+            }
+        }).addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(Exception e) {
+                Log.w(TAG, "onFailure: FAILED" + e.getMessage());
+                if (mUiCallBack != null) {
+                    mUiCallBack.updateUiOnError("GET USER DETAIL : Query user list from cloud failed");
+                }
+            }
+        });
+    }
+
     public void getAllUsers(Context context) {
         if (mCloudDBZone == null) {
             Log.w(TAG_dB, "GET USER DETAIL : CloudDBZone is null, try re-open it");
             return;
         }
-        Task<CloudDBZoneSnapshot<Votes>> queryTask = mCloudDBZone.executeQuery(
-                CloudDBZoneQuery.where(Votes.class),
+        Task<CloudDBZoneSnapshot<Users>> queryTask = mCloudDBZone.executeQuery(
+                CloudDBZoneQuery.where(Users.class),
                 CloudDBZoneQuery.CloudDBZoneQueryPolicy.POLICY_QUERY_FROM_CLOUD_ONLY);
-        queryTask.addOnSuccessListener(new OnSuccessListener<CloudDBZoneSnapshot<Votes>>() {
+        queryTask.addOnSuccessListener(new OnSuccessListener<CloudDBZoneSnapshot<Users>>() {
             @Override
-            public void onSuccess(CloudDBZoneSnapshot<Votes> snapshot) {
-                userListResult(snapshot,context);
+            public void onSuccess(CloudDBZoneSnapshot<Users> snapshot) {
+                userListResult(snapshot, context);
                 Log.w(TAG_dB, "GET USER DETAIL : GoResults: ");
             }
         }).addOnFailureListener(new OnFailureListener() {
@@ -290,21 +366,106 @@ public class CloudDBZoneWrapper {
         });
     }
 
-    private void userListResult(CloudDBZoneSnapshot<Votes> snapshot,Context context) {
+    public void getAllBooks(Context context, Boolean control) {
+        if (mCloudDBZone == null) {
+            Log.w(TAG_dB, "GET USER DETAIL : CloudDBZone is null, try re-open it");
+            return;
+        }
+        Task<CloudDBZoneSnapshot<Votes>> queryTask = mCloudDBZone.executeQuery(
+                CloudDBZoneQuery.where(Votes.class),
+                CloudDBZoneQuery.CloudDBZoneQueryPolicy.POLICY_QUERY_FROM_CLOUD_ONLY);
+        queryTask.addOnSuccessListener(new OnSuccessListener<CloudDBZoneSnapshot<Votes>>() {
+            @Override
+            public void onSuccess(CloudDBZoneSnapshot<Votes> snapshot) {
+                bookListResult(snapshot, context, control);
+                Log.w(TAG_dB, "GET USER DETAIL : GoResults: ");
+            }
+        }).addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(Exception e) {
+                Log.w(TAG, "onFailure: FAILED" + e.getMessage());
+                if (mUiCallBack != null) {
+                    mUiCallBack.updateUiOnError("GET USER DETAIL : Query user list from cloud failed");
+                }
+            }
+        });
+    }
+
+    private void userListResult(CloudDBZoneSnapshot<Users> snapshot, Context context, String signInUserEmail) {
+        SharedPreferences sharedPreferences = context.getSharedPreferences(context.getPackageName(), Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+
+        CloudDBZoneObjectList<Users> userInfoCursor = snapshot.getSnapshotObjects();
+        List<Users> userInfoList = new ArrayList<>();
+
+        try {
+            while (userInfoCursor.hasNext()) {
+                Users userInfo = userInfoCursor.next();
+                userInfoList.add(userInfo);
+                Log.w(TAG_dB, "USER DETAIL RESULT : processQueryResult: " + userInfo.getEmail() + " " + userInfo.getId());
+                Log.w(TAG_dB, "userListResult: " + signInUserEmail);
+
+                updateUserIndex(userInfo);
+                if (signInUserEmail.equals(userInfo.getEmail())) {
+                    editor.putBoolean("check", true);
+                    editor.commit();
+                    Log.w(TAG_dB, "USER DETAIL RESULT ENTERED : processQueryResult: " + signInUserEmail);
+                } else {
+
+                    editor.putBoolean("check", false);
+                    editor.commit();
+                }
+            }
+        } catch (AGConnectCloudDBException e) {
+            Log.w(TAG_dB, "USER DETAIL RESULT : processQueryResult: " + e.getMessage());
+        }
+        snapshot.release();
+
+        //updateUserIndex(userInfoList.get(userInfoList.size()));
+
+        if (mUiCallBack != null) {
+            mUiCallBack.onUserAddOrQuery(userInfoList);
+
+        }
+    }
+
+    private void userListResult(CloudDBZoneSnapshot<Users> snapshot, Context context) {
+        CloudDBZoneObjectList<Users> userInfoCursor = snapshot.getSnapshotObjects();
+        List<Users> userInfoList = new ArrayList<>();
+
+        try {
+            while (userInfoCursor.hasNext()) {
+                Users userInfo = userInfoCursor.next();
+                userInfoList.add(userInfo);
+                Log.w(TAG_dB, "USER DETAIL RESULT : processQueryResult: ss " + userInfo.getEmail() + " " + userInfo.getId());
+            }
+        } catch (AGConnectCloudDBException e) {
+            Log.w(TAG_dB, "USER DETAIL RESULT : processQueryResult: " + e.getMessage());
+        }
+        snapshot.release();
+        if (mUiCallBack != null) {
+            mUiCallBack.onUserAddOrQuery(userInfoList);
+
+        }
+    }
+
+    private void bookListResult(CloudDBZoneSnapshot<Votes> snapshot, Context context, Boolean control) {
         CloudDBZoneObjectList<Votes> userInfoCursor = snapshot.getSnapshotObjects();
         List<Votes> userInfoList = new ArrayList<>();
         try {
             while (userInfoCursor.hasNext()) {
                 Votes userInfo = userInfoCursor.next();
                 userInfoList.add(userInfo);
-                Log.w(TAG_dB, "USER DETAIL RESULT : processQueryResult: "+userInfo.getYes()+ " "+userInfo.getNo());
-                    yes =userInfoList.get(0).getYes();
-                    no =userInfoList.get(0).getNo();
+                Log.w(TAG_dB, "USER DETAIL RESULT : processQueryResult: " + userInfo.getYes() + " " + userInfo.getNo());
+                yes = userInfoList.get(0).getYes();
+                no = userInfoList.get(0).getNo();
+                if (context.getSharedPreferences(context.getPackageName(), Context.MODE_PRIVATE).getBoolean("check", false) & control) {
+                    sendNotification(pushToken, 0, context);
+                }
             }
         } catch (AGConnectCloudDBException e) {
             Log.w(TAG_dB, "USER DETAIL RESULT : processQueryResult: " + e.getMessage());
         }
-        sendNotification(pushToken,0,context);
         snapshot.release();
         if (mUiCallBack != null) {
             mUiCallBack.onAddOrQuery(userInfoList);

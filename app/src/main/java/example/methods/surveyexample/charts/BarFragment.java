@@ -43,7 +43,7 @@ public class BarFragment extends Fragment {
         barChart.setDrawGridBackground(true);
 
         ArrayList<BarEntry> visitors = new ArrayList<>();
-        visitors.add(new BarEntry(2, Float.parseFloat(String.valueOf(yes))));
+        visitors.add(new BarEntry(2, (float) (yes)));
         visitors.add(new BarEntry(1, Float.parseFloat(String.valueOf(no))));
 
 

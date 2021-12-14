@@ -106,6 +106,7 @@ public class PushManager {
                 "Bearer " + accessToken,
                 notificationMessage
         );
+
         call.enqueue(new Callback<PushResult>() {
             @Override
             public void onResponse(Call<PushResult> call, Response<PushResult> response) {

@@ -13,6 +13,7 @@ import static example.methods.surveyexample.push.PushManager.pushToken;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,6 +27,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.huawei.agconnect.auth.AGConnectAuth;
 import com.huawei.agconnect.auth.SignInResult;
 import com.huawei.agconnect.cloud.database.AGConnectCloudDB;
 import com.huawei.agconnect.cloud.database.CloudDBZoneConfig;
@@ -50,6 +52,7 @@ import example.methods.surveyexample.adapter.SurveyAdapter;
 import example.methods.surveyexample.databinding.ActivityMainBinding;
 import example.methods.surveyexample.model.CloudDBZoneWrapper;
 import example.methods.surveyexample.model.LoginHelper;
+import example.methods.surveyexample.model.Users;
 import example.methods.surveyexample.model.Votes;
 import example.methods.surveyexample.pages.SignIn;
 
@@ -74,6 +77,8 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
         mCloudDBZoneWrapper = new CloudDBZoneWrapper();
     }
 
+    private String email;
+
     private SignIn sActivity;
 
     @Override
@@ -82,6 +87,13 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         getSupportActionBar().setTitle("TURKEY PULL");
+
+
+        SharedPreferences sharedPreferences = this.getSharedPreferences(this.getPackageName(), Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        email = getApplicationContext().getSharedPreferences(getApplicationContext().getPackageName(), Context.MODE_PRIVATE).getString("email", "onCreate@gmail.com");
+        Log.i(TAG, "onCreate: " + email);
+
 
         mHandler = new Handler(Looper.getMainLooper());
         mSurveyAdapter = new SurveyAdapter(getApplicationContext());
@@ -101,7 +113,8 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
         instance.setUserId(userId);
         instance.setUserProfile(userName, userSurname);
 
-        Votes surveyInfo = new Votes();
+
+
         mHandler.post(() -> {
             LoginHelper loginHelper = this.getLoginHelper();
             loginHelper.addLoginCallBack(this);
@@ -110,40 +123,61 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
         mHandler.post(() -> {
             mCloudDBZoneWrapper.addCallBacks(MainActivity.this);
             mCloudDBZoneWrapper.createObjectType();
-            mCloudDBZoneWrapper.openCloudDBZoneV2(MainActivity.this);
-
+            mCloudDBZoneWrapper.openCloudDBZoneV2(MainActivity.this, email);
         });
+
         getToken(MainActivity.this);
+
+        Votes surveyInfo = new Votes();
+        Users userInfo = new Users();
         binding.report.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 getToken(MainActivity.this);
                 getAccessToken();
-                if (binding.yesAnswer.isChecked()) {
-                    surveyInfo.setId(0);
-                    surveyInfo.setNo(no);
-                    surveyInfo.setYes(yes + 1);
-                    mHandler.post(() -> {
-                        mCloudDBZoneWrapper.upsertBookInfos(surveyInfo, MainActivity.this);
-                    });
-                    reportAnswerEvt("yes", MainActivity.this);
-                } else if (binding.notAnswer.isChecked()) {
-                    surveyInfo.setId(0);
-                    surveyInfo.setYes(yes);
-                    surveyInfo.setNo(no + 1);
-                    mHandler.post(() -> {
-                        mCloudDBZoneWrapper.upsertBookInfos(surveyInfo, MainActivity.this);
-                    });
-                    reportAnswerEvt("no", MainActivity.this);
-                } else if (!binding.notAnswer.isChecked() && !binding.yesAnswer.isChecked()) {
-                    Toast.makeText(MainActivity.this, "Lütfen bir adet cevap seçiniz.", Toast.LENGTH_SHORT).show();
+                if (getApplicationContext().getSharedPreferences(getApplicationContext().getPackageName(), Context.MODE_PRIVATE).getBoolean("check", false)) {
+                    Toast.makeText(getApplicationContext(), "You have already voted!", Toast.LENGTH_SHORT).show();
+                } else {
+                    if (binding.yesAnswer.isChecked()) {
+                        surveyInfo.setId(0);
+                        surveyInfo.setNo(no);
+                        surveyInfo.setYes(yes + 1);
+
+                        userInfo.setEmail(email);
+                        userInfo.setId(mCloudDBZoneWrapper.getUserIndex() + 1);
+
+                        mHandler.post(() -> {
+                            mCloudDBZoneWrapper.upsertBookInfos(surveyInfo, MainActivity.this);
+                            mCloudDBZoneWrapper.upsertUserInfos(userInfo, MainActivity.this);
+                        });
+                        reportAnswerEvt("yes", MainActivity.this);
+                    } else if (binding.notAnswer.isChecked()) {
+                        surveyInfo.setId(0);
+                        surveyInfo.setYes(yes);
+                        surveyInfo.setNo(no + 1);
+
+                        userInfo.setEmail(email);
+                        userInfo.setId(mCloudDBZoneWrapper.getUserIndex() + 1);
+                        mHandler.post(() -> {
+                            mCloudDBZoneWrapper.upsertBookInfos(surveyInfo, MainActivity.this);
+                            mCloudDBZoneWrapper.upsertUserInfos(userInfo, MainActivity.this);
+                        });
+                        reportAnswerEvt("no", MainActivity.this);
+                    } else if (!binding.notAnswer.isChecked() && !binding.yesAnswer.isChecked()) {
+                        Toast.makeText(MainActivity.this, "Lütfen bir adet cevap seçiniz.", Toast.LENGTH_SHORT).show();
+                    }
                 }
+
             }
         });
         binding.floatingActionButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, ChartActivity.class));
+                if (MainActivity.this.getSharedPreferences(MainActivity.this.getPackageName(), Context.MODE_PRIVATE).getBoolean("check", false)) {
+                    startActivity(new Intent(MainActivity.this, ChartActivity.class));
+                } else {
+                    Toast.makeText(MainActivity.this, "Please vote first.", Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
@@ -166,6 +200,8 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
             builder.setNegativeButton("YES", new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface dialog, int which) {
+
+                    AGConnectAuth.getInstance().signOut();
                     finish();
                     startActivity(new Intent(MainActivity.this, SignIn.class));
                 }
@@ -266,6 +302,13 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
     public void onAddOrQuery(List<Votes> bookInfoList) {
         Log.i(TAG, "Using default onAddOrQuery");
         Log.i(TAG, "onAddOrQuery: TEST " + bookInfoList.get(0).getYes());
+    }
+
+    @Override
+    public void onUserAddOrQuery(List<Users> userList) {
+        Log.i(TAG, "Using default onUserAddOrQuery");
+
+        Log.i(TAG, "onAddOrQuery: TEST " + userList.get(0).getEmail());
     }
 
     @Override
