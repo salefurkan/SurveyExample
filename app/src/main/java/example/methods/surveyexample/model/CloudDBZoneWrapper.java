@@ -109,6 +109,7 @@ public class CloudDBZoneWrapper {
         try {
             mCloudDB.createObjectType(ObjectTypeInfoHelper.getObjectTypeInfo());
             Log.w(TAG_dB, "createObjectTypeSuccess ");
+            openCloudDBZone();
         } catch (AGConnectCloudDBException e) {
             Log.w(TAG_dB, "createObjectTypeError: " + e.getMessage());
         }
@@ -383,7 +384,7 @@ public class CloudDBZoneWrapper {
         }).addOnFailureListener(new OnFailureListener() {
             @Override
             public void onFailure(Exception e) {
-                Log.w(TAG, "onFailure: FAILED" + e.getMessage());
+                Log.w(TAG, "onFailure: FAILED " + e.getMessage());
                 if (mUiCallBack != null) {
                     mUiCallBack.updateUiOnError("GET USER DETAIL : Query user list from cloud failed");
                 }

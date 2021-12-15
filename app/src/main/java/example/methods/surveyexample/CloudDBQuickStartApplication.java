@@ -1,7 +1,9 @@
 package example.methods.surveyexample;
 
 import static example.methods.surveyexample.push.PushManager.getAccessToken;
+
 import android.app.Application;
+
 import example.methods.surveyexample.model.CloudDBZoneWrapper;
 
 public class CloudDBQuickStartApplication extends Application {

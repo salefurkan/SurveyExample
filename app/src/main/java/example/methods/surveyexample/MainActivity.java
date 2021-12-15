@@ -81,6 +81,20 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
 
     private SignIn sActivity;
 
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        mHandler = new Handler(Looper.getMainLooper());
+
+        mHandler.post(() -> {
+            mCloudDBZoneWrapper.addCallBacks(MainActivity.this);
+            mCloudDBZoneWrapper.createObjectType();
+            mCloudDBZoneWrapper.openCloudDBZoneV2(MainActivity.this, email);
+        });
+
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -89,9 +103,10 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
         getSupportActionBar().setTitle("TURKEY PULL");
 
 
+
         SharedPreferences sharedPreferences = this.getSharedPreferences(this.getPackageName(), Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPreferences.edit();
-        email = getApplicationContext().getSharedPreferences(getApplicationContext().getPackageName(), Context.MODE_PRIVATE).getString("email", "onCreate@gmail.com");
+        email = sharedPreferences.getString("email", "onCreate@gmail.com");
         Log.i(TAG, "onCreate: " + email);
 
 
@@ -112,8 +127,6 @@ public class MainActivity extends AppCompatActivity implements CloudDBZoneWrappe
         instance.setRestrictionEnabled(false);
         instance.setUserId(userId);
         instance.setUserProfile(userName, userSurname);
-
-
 
         mHandler.post(() -> {
             LoginHelper loginHelper = this.getLoginHelper();

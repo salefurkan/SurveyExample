@@ -18,7 +18,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.huawei.agconnect.auth.AGConnectAuth;
 import com.huawei.agconnect.auth.AGConnectAuthCredential;
 import com.huawei.agconnect.auth.EmailAuthProvider;
-import com.huawei.agconnect.auth.EmailUser;
 import com.huawei.agconnect.auth.SignInResult;
 import com.huawei.agconnect.auth.VerifyCodeResult;
 import com.huawei.agconnect.auth.VerifyCodeSettings;
@@ -83,6 +82,7 @@ public class SignIn extends AppCompatActivity {
         binding.loginBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+
                 login();
             }
         });
@@ -99,34 +99,6 @@ public class SignIn extends AppCompatActivity {
                 binding.pass.setSelection(binding.pass.getText().length());
             }
         });
-        binding.loginBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                EmailUser emailUser = new EmailUser.Builder().
-                        setEmail(editText.getText().toString())
-                        .setPassword(binding.pass.getText().toString()).build();
-
-                AGConnectAuth.getInstance().createUser(emailUser)
-                        .addOnSuccessListener(new OnSuccessListener<SignInResult>() {
-                            @Override
-                            public void onSuccess(SignInResult signInResult) {
-                                editor.putString("email", signInResult.getUser().getEmail());
-                                Log.i(TAG, signInResult.getUser().getDisplayName() + " signIn success " + signInResult.getUser().getEmail());
-
-                                Intent intent = new Intent(SignIn.this, MainActivity.class);
-                                startActivity(intent);
-                                finish();
-
-                            }
-                        }).addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(Exception e) {
-                        Log.i(TAG, "onFailure: sigIn" + e.getMessage());
-                    }
-                });
-            }
-        });
-        Log.i(TAG, "onCreate: ");
 
         binding.huaweId.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -217,6 +189,7 @@ public class SignIn extends AppCompatActivity {
         String email = binding.emailInput.getText().toString().trim();
         String password = binding.pass.getText().toString().trim();
         String verifyCode = binding.verifyCode.getText().toString().trim();
+        Log.i(TAG, "login: " + verifyCode);
         AGConnectAuthCredential credential;
         if (TextUtils.isEmpty(verifyCode)) {
             credential = EmailAuthProvider.credentialWithPassword(email, password);
@@ -232,8 +205,17 @@ public class SignIn extends AppCompatActivity {
                 .addOnSuccessListener(new OnSuccessListener<SignInResult>() {
                     @Override
                     public void onSuccess(SignInResult signInResult) {
+
+                        SharedPreferences sharedPreferences = SignIn.this.getSharedPreferences(SignIn.this.getPackageName(), Context.MODE_PRIVATE);
+                        SharedPreferences.Editor editor = sharedPreferences.edit();
+
+                        editor.putString("email", signInResult.getUser().getEmail());
+                        editor.commit();
+                        Log.i(TAG, signInResult.getUser().getDisplayName() + " signIn success " + signInResult.getUser().getEmail());
+
+                        finish();
                         startActivity(new Intent(SignIn.this, MainActivity.class));
-                        SignIn.this.finish();
+
                     }
                 })
                 .addOnFailureListener(new OnFailureListener() {
